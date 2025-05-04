@@ -1,56 +1,65 @@
-from fabric.api import task, run, sudo, local, lcd, cd, put
+from fabric import task
+from invoke import Responder
+from fabric.transfer import Transfer
+import os
 
 @task
-def greetings(msg):
-    print("Good, {}".format(msg))
+def greetings(c, msg):
+    print(f"Good, {msg}")
 
 @task
-def system_info():
+def system_info(c):
     print("Disk Space:")
-    local("df -h")
+    c.local("df -h")
 
     print("\nMemory Info:")
-    local("free -m")
+    c.local("free -m")
 
     print("\nSystem Uptime:")
-    local("uptime")
+    c.local("uptime")
 
 @task
-def remote_exec():
-    run("hostname")
-    run("uptime")
-    run("df -h")
-    run("free -m")
-    sudo("yum install unzip zip wget -y")
+def remote_exec(c):
+    c.run("hostname")
+    c.run("uptime")
+    c.run("df -h")
+    c.run("free -m")
+    c.sudo("yum install unzip zip wget -y")
 
 @task
-def web_setup(WEBURL, DIRNAME):
+def web_setup(c, WEBURL, DIRNAME):
     print("###############################")
     print("Installing dependencies")
     print("###############################")
-    sudo("yum install httpd wget unzip -y")
+    c.sudo("yum install httpd wget unzip -y")
 
     print("###############################")
     print("Starting and enabling Apache")
     print("###############################")
-    sudo("systemctl start httpd")
-    sudo("systemctl enable httpd")
+    c.sudo("systemctl start httpd")
+    c.sudo("systemctl enable httpd")
 
     print("###############################")
-    print("Downloading website archive")
+    print("Downloading and unpacking site locally")
     print("###############################")
-    local("wget -O website.zip {}".format(WEBURL))
-    local("unzip -o website.zip")
+    os.system(f"wget -O website.zip {WEBURL}")
+    os.system("unzip -o website.zip")
 
     print("###############################")
-    print("Zipping website and uploading")
+    print("Zipping and transferring files")
     print("###############################")
-    with lcd(DIRNAME):
-        local("zip -r tooplate.zip *")
-        put("tooplate.zip", "/var/www/html/", use_sudo=True)
+    os.chdir(DIRNAME)
+    os.system("zip -r tooplate.zip *")
+    os.chdir("..")
 
-    with cd("/var/www/html/"):
-        sudo("unzip -o tooplate.zip")
+    transfer = Transfer(c)
+    transfer.put(f"{DIRNAME}/tooplate.zip", "/var/www/html/", preserve_mode=False)
 
-    sudo("systemctl restart httpd")
+    print("###############################")
+    print("Unpacking on remote server")
+    print("###############################")
+    with c.cd("/var/www/html/"):
+        c.sudo("unzip -o tooplate.zip")
+
+    c.sudo("systemctl restart httpd")
     print("✅ Website setup is complete.")
